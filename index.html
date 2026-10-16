@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>魔物の森サバイバル</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Zen+Old+Mincho:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=12">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="audio-control" role="group" aria-label="効果音設定">
+    <button id="sound-toggle" type="button" aria-label="効果音のオン・オフ" aria-pressed="true">🔊 効果音 ON</button>
+  </div>
+  <div id="combat-flash" aria-hidden="true"></div>
+  <div id="wave-banner" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="hud" class="hidden">
+    <div id="xp-bar"><div id="xp-fill"></div></div>
+    <div id="status-panel" class="panel">
+      <div class="hp-row"><span>HP</span><span id="hp-text"></span></div>
+      <div class="bar"><div id="hp-fill"></div></div>
+      <div class="stat-row"><span id="lv-text"></span><span id="kill-text"></span></div>
+    </div>
+    <div id="wave-status">WAVE 1 · RUSH</div>
+    <div id="timer">00:00</div>
+    <div id="weapon-list" class="list"></div>
+    <div id="passive-list" class="list"></div>
+  </div>
+
+  <div id="enemy-health-layer" aria-hidden="true"></div>
+  <div id="damage-layer"></div>
+
+  <div id="menu" class="hidden">
+    <h2>LEVEL UP!</h2>
+    <div id="cards"></div>
+    <p class="hint">十字ボタン左右 / 左スティックの左右で選択　Aで決定　（1〜3キー・クリックでも可）</p>
+  </div>
+
+  <div id="screen" class="hidden"></div>
+  <div id="pad-status">ゲームパッド: 未接続（接続後、ボタンを1回押してください）</div>
+  <p id="load-error" hidden role="alert"></p>
+
+  <!-- Classic local scripts remain editable and can be opened directly via file://. -->
+  <script src="audio.js"></script>
+  <script src="combat-physics.js"></script>
+  <script src="effect-scaling.js"></script>
+  <script src="render.js"></script>
+  <script src="game.js"></script>
+
+  <script type="module">
+    const errorEl = document.getElementById('load-error');
+
+    try {
+      const [THREE, { EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+        import('three'),
+        import('three/addons/postprocessing/EffectComposer.js'),
+        import('three/addons/postprocessing/RenderPass.js'),
+        import('three/addons/postprocessing/UnrealBloomPass.js'),
+        import('three/addons/postprocessing/OutputPass.js'),
+      ]);
+
+      window.ForestThree = { THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
+      window.initializeForestRender();
+      window.startForestGame();
+    } catch (error) {
+      console.error('ゲームを読み込めませんでした:', error);
+      errorEl.hidden = false;
+      errorEl.textContent = 'ゲームの読み込みに失敗しました。インターネット接続を確認して、ページを再読み込みしてください。';
+    }
+  </script>
+</body>
+</html>
