@@ -841,3 +841,55 @@ body.title-demo #screen {
   .joystick-thumb { width: 48px; height: 48px; }
   #weapon-list { left: 138px; }
 }
+
+@media screen and (max-width: 700px) and (orientation: portrait) {
+  #audio-control {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+  }
+
+  #mobile-pause {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: auto;
+    left: calc(12px + env(safe-area-inset-left, 0px));
+  }
+
+  #status-panel {
+    top: calc(66px + env(safe-area-inset-top, 0px));
+    right: 12px;
+    left: 12px;
+    width: auto;
+    padding: 8px 11px;
+    border-radius: 12px;
+  }
+
+  .hp-row {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .bar { height: 10px; }
+
+  .stat-row {
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13px;
+  }
+
+  #timer {
+    top: calc(151px + env(safe-area-inset-top, 0px));
+    font-size: clamp(23px, 6vw, 27px);
+  }
+
+  #wave-status {
+    top: calc(184px + env(safe-area-inset-top, 0px));
+    width: calc(100% - 24px);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-align: center;
+  }
+
+  #weapon-list { left: 174px; right: 10px; }
+  .chip { max-width: 100%; font-size: 9px; }
+}

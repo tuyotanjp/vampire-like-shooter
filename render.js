@@ -769,7 +769,8 @@ function createView(container) {
   scene.background = new THREE.Color(0x120c1c);
   scene.fog = new THREE.FogExp2(0x1a1030, 0.0065);
 
-  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.5, 800);
+  const getCameraFov = () => window.innerWidth <= 700 && window.innerHeight > window.innerWidth ? 48 : 40;
+  const camera = new THREE.PerspectiveCamera(getCameraFov(), window.innerWidth / window.innerHeight, 0.5, 800);
   const camPos = new THREE.Vector3(0, 30, 24);
   const shakeOffset = new THREE.Vector3();
   camera.position.copy(camPos);
@@ -1784,6 +1785,7 @@ function createView(container) {
     const h = window.innerHeight;
     renderer.setSize(w, h);
     camera.aspect = w / h;
+    camera.fov = getCameraFov();
     camera.updateProjectionMatrix();
     composer.setSize(w, h);
   }
