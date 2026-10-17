@@ -22,6 +22,11 @@ body {
   user-select: none;
 }
 
+body.gamepad-active:not(.mobile-device),
+body.gamepad-active:not(.mobile-device) * {
+  cursor: none !important;
+}
+
 .hidden {
   display: none !important;
 }

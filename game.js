@@ -107,6 +107,8 @@ let prevStickX = 0;
 let virtualStickPointerId = null;
 let virtualStickX = 0;
 let virtualStickY = 0;
+let previousPadButtons = [];
+let previousPadAxes = [];
 
 function resetVirtualStick() {
   virtualStickPointerId = null;
@@ -168,6 +170,33 @@ window.addEventListener('pointerup', () => initializeAudio(true));
 window.addEventListener('touchend', () => initializeAudio(true), { passive: true });
 window.addEventListener('gamepadconnected', () => initializeAudio(true));
 
+function showMouseCursor(event) {
+  if (event.pointerType && event.pointerType !== 'mouse') return;
+  document.body.classList.remove('gamepad-active');
+}
+
+window.addEventListener('pointermove', showMouseCursor, { passive: true });
+window.addEventListener('pointerdown', showMouseCursor, { passive: true });
+
+function updateGamepadCursor(pad) {
+  if (isMobileDevice) return;
+  if (!pad) {
+    previousPadButtons = [];
+    previousPadAxes = [];
+    document.body.classList.remove('gamepad-active');
+    return;
+  }
+
+  const buttons = Array.from(pad.buttons, (button) => Boolean(button?.pressed));
+  const axes = Array.from(pad.axes, (axis) => deadzone(axis));
+  const buttonPressed = buttons.some((pressed, index) => pressed && !previousPadButtons[index]);
+  const stickMoved = axes.some((value, index) => Math.abs(value - (previousPadAxes[index] || 0)) >= 0.08);
+  if (buttonPressed || stickMoved) document.body.classList.add('gamepad-active');
+
+  previousPadButtons = buttons;
+  previousPadAxes = axes;
+}
+
 // 効果音は毎回ONで起動し、画面上のボタンでON/OFFを切り替えるだけにする。
 function updateSoundToggle() {
   const enabled = isAudioEnabled();
@@ -201,6 +230,7 @@ function deadzone(v) {
 
 function pollInput() {
   const pad = getPad();
+  updateGamepadCursor(pad);
   const now = { up: false, down: false, left: false, right: false, a: false, b: false, start: false };
   let sx = 0;
   let sy = 0;
