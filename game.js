@@ -86,73 +86,12 @@ const screenEl = document.getElementById('screen');
 const padStatus = document.getElementById('pad-status');
 const soundToggle = document.getElementById('sound-toggle');
 const waveStatus = document.getElementById('wave-status');
-const joystickEl = document.getElementById('virtual-joystick');
-const mobilePauseEl = document.getElementById('mobile-pause');
-const levelUpHintEl = document.querySelector('#menu .hint');
-
-// 起動時にモバイル端末か判定し、操作UIとタイトルの説明を切り替える。
-const isMobileDevice = Boolean(
-  navigator.userAgentData?.mobile
-  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
-  || (window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(max-width: 900px)').matches),
-);
-document.body.classList.toggle('mobile-device', isMobileDevice);
-if (isMobileDevice) levelUpHintEl.textContent = '強化したいカードをタップして選択';
 
 // ===== 入力（ゲームパッド優先、キーボードも対応） =====
 const heldKeys = new Set();
 const pressedKeys = new Set();
 const prevPad = { up: false, down: false, left: false, right: false, a: false, b: false, start: false };
 let prevStickX = 0;
-let virtualStickPointerId = null;
-let virtualStickX = 0;
-let virtualStickY = 0;
-let previousPadButtons = [];
-let previousPadAxes = [];
-
-function resetVirtualStick() {
-  virtualStickPointerId = null;
-  virtualStickX = 0;
-  virtualStickY = 0;
-  joystickEl.style.setProperty('--stick-x', '0px');
-  joystickEl.style.setProperty('--stick-y', '0px');
-}
-
-function updateVirtualStick(event) {
-  if (event.pointerId !== virtualStickPointerId) return;
-  const bounds = joystickEl.getBoundingClientRect();
-  const maxDistance = bounds.width * 0.32;
-  let dx = event.clientX - (bounds.left + bounds.width / 2);
-  let dy = event.clientY - (bounds.top + bounds.height / 2);
-  const distance = Math.hypot(dx, dy);
-  if (distance > maxDistance) {
-    dx = (dx / distance) * maxDistance;
-    dy = (dy / distance) * maxDistance;
-  }
-
-  virtualStickX = dx / maxDistance;
-  virtualStickY = dy / maxDistance;
-  if (Math.hypot(virtualStickX, virtualStickY) < 0.12) {
-    virtualStickX = 0;
-    virtualStickY = 0;
-  }
-  joystickEl.style.setProperty('--stick-x', `${dx}px`);
-  joystickEl.style.setProperty('--stick-y', `${dy}px`);
-}
-
-joystickEl.addEventListener('pointerdown', (event) => {
-  if (virtualStickPointerId !== null) return;
-  event.preventDefault();
-  virtualStickPointerId = event.pointerId;
-  joystickEl.setPointerCapture(event.pointerId);
-  updateVirtualStick(event);
-});
-joystickEl.addEventListener('pointermove', updateVirtualStick);
-joystickEl.addEventListener('pointerup', (event) => {
-  if (event.pointerId === virtualStickPointerId) resetVirtualStick();
-});
-joystickEl.addEventListener('pointercancel', resetVirtualStick);
-joystickEl.addEventListener('lostpointercapture', resetVirtualStick);
 
 window.addEventListener('keydown', (e) => {
   initializeAudio(true);
@@ -161,41 +100,11 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', (e) => heldKeys.delete(e.code));
-window.addEventListener('blur', () => {
-  heldKeys.clear();
-  resetVirtualStick();
-});
+window.addEventListener('blur', () => heldKeys.clear());
 window.addEventListener('pointerdown', () => initializeAudio(true));
 window.addEventListener('pointerup', () => initializeAudio(true));
 window.addEventListener('touchend', () => initializeAudio(true), { passive: true });
 window.addEventListener('gamepadconnected', () => initializeAudio(true));
-
-function showMouseCursor(event) {
-  if (event.pointerType && event.pointerType !== 'mouse') return;
-  document.body.classList.remove('gamepad-active');
-}
-
-window.addEventListener('pointermove', showMouseCursor, { passive: true });
-window.addEventListener('pointerdown', showMouseCursor, { passive: true });
-
-function updateGamepadCursor(pad) {
-  if (isMobileDevice) return;
-  if (!pad) {
-    previousPadButtons = [];
-    previousPadAxes = [];
-    document.body.classList.remove('gamepad-active');
-    return;
-  }
-
-  const buttons = Array.from(pad.buttons, (button) => Boolean(button?.pressed));
-  const axes = Array.from(pad.axes, (axis) => deadzone(axis));
-  const buttonPressed = buttons.some((pressed, index) => pressed && !previousPadButtons[index]);
-  const stickMoved = axes.some((value, index) => Math.abs(value - (previousPadAxes[index] || 0)) >= 0.08);
-  if (buttonPressed || stickMoved) document.body.classList.add('gamepad-active');
-
-  previousPadButtons = buttons;
-  previousPadAxes = axes;
-}
 
 // 効果音は毎回ONで起動し、画面上のボタンでON/OFFを切り替えるだけにする。
 function updateSoundToggle() {
@@ -230,7 +139,6 @@ function deadzone(v) {
 
 function pollInput() {
   const pad = getPad();
-  updateGamepadCursor(pad);
   const now = { up: false, down: false, left: false, right: false, a: false, b: false, start: false };
   let sx = 0;
   let sy = 0;
@@ -259,8 +167,6 @@ function pollInput() {
   let my = sy + (now.down ? 1 : 0) - (now.up ? 1 : 0);
   mx += (isDown('KeyD', 'ArrowRight') ? 1 : 0) - (isDown('KeyA', 'ArrowLeft') ? 1 : 0);
   my += (isDown('KeyS', 'ArrowDown') ? 1 : 0) - (isDown('KeyW', 'ArrowUp') ? 1 : 0);
-  mx += virtualStickX;
-  my += virtualStickY;
   const len = Math.hypot(mx, my);
   if (len > 1) {
     mx /= len;
@@ -380,7 +286,7 @@ function renderRanking() {
         <thead><tr><th>順位</th><th>生存時間</th><th>レベル</th><th>撃破</th><th>日付</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="ranking-actions"><button class="screen-button" type="button" data-ranking-close>タイトルへ戻る <span>${isMobileDevice ? 'タップ' : 'パッド B ／ キーボード X・R'}</span></button></div>
+      <div class="ranking-actions"><button class="screen-button" type="button" data-ranking-close>タイトルへ戻る <span>パッド B ／ キーボード X・R</span></button></div>
     </section>`;
 }
 
@@ -1177,27 +1083,25 @@ function screenHtml() {
   if (state === 'title') {
     return `
       <div class="title">
-        <h1>魔物の森サバイバル</h1>
+        <h1 class="title-logo"><img src="title2.png" alt="魔物の森サバイバル"></h1>
         <p class="sub">3D VAMPIRE-LIKE SHOOTER</p>
         <p class="demo-label"><span class="demo-live-dot"></span><span id="demo-status">LIVE DEMO</span><span class="demo-stats" id="demo-stats"></span></p>
         <ul class="controls">
-          ${isMobileDevice
-            ? '<li>ゲーム中は画面左下のスティックをドラッグして移動</li><li>武器は自動で攻撃。強化カードはタップして選択</li><li>ゲーム中は右上のⅡボタンで一時停止</li>'
-            : '<li>左スティック / 十字ボタン：移動（キーボード：WASD・矢印）</li><li>武器は自動で攻撃。レベルアップで武器・弾・能力を強化</li><li>重装兵はとても頑丈。倒すと回復ハートを落とす</li><li>【パッド】A：決定　Start：ポーズ　B：戻る　Y：ランキング</li><li>【キーボード】Enter：決定　Esc / P：ポーズ　X：戻る　R：ランキング</li>'}
+          <li>左スティック / 十字ボタン：移動（キーボード：WASD・矢印）</li>
+          <li>武器は自動で攻撃。レベルアップで武器・弾・能力を強化</li>
+          <li>重装兵はとても頑丈。倒すと回復ハートを落とす</li>
+          <li>【パッド】A：決定　Start：ポーズ　B：戻る　Y：ランキング</li>
+          <li>【キーボード】Enter：決定　Esc / P：ポーズ　X：戻る　R：ランキング</li>
         </ul>
-        <button class="screen-button" type="button" data-ranking-open>ランキングを見る <span>${isMobileDevice ? 'タップ' : 'パッド Y ／ キーボード R'}</span></button>
-        ${isMobileDevice
-          ? '<button class="screen-button start-button" type="button" data-game-start>タップしてスタート</button>'
-          : '<p class="blink">Aボタン / Enter でスタート</p>'}
+        <button class="screen-button" type="button" data-ranking-open>ランキングを見る <span>パッド Y ／ キーボード R</span></button>
+        <p class="blink">Aボタン / Enter でスタート</p>
       </div>`;
   }
   if (state === 'paused') {
     return `
       <div class="title">
         <h1 class="small">PAUSE</h1>
-        ${isMobileDevice
-          ? '<div class="mobile-actions"><button class="screen-button" type="button" data-game-resume>ゲームに戻る</button><button class="screen-button" type="button" data-game-title>タイトルへ戻る</button></div>'
-          : '<p class="controls">Startボタン：再開　Bボタン：タイトルへ</p>'}
+        <p class="controls">Startボタン：再開　Bボタン：タイトルへ</p>
       </div>`;
   }
   if (state === 'over') {
@@ -1209,9 +1113,7 @@ function screenHtml() {
           <p>到達レベル <b>${run.level}</b></p>
           <p>撃破数 <b>${run.kills}</b></p>
         </div>
-        ${isMobileDevice
-          ? '<div class="mobile-actions"><button class="screen-button" type="button" data-game-restart>もう一度プレイ</button><button class="screen-button" type="button" data-game-title>タイトルへ戻る</button></div>'
-          : '<p class="controls">Aボタン：もう一度　Bボタン：タイトルへ</p>'}
+        <p class="controls">Aボタン：もう一度　Bボタン：タイトルへ</p>
       </div>`;
   }
   return '';
@@ -1221,8 +1123,6 @@ function syncUi() {
   hudEl.classList.toggle('hidden', !run || state === 'title');
   menuEl.classList.toggle('hidden', state !== 'levelup');
   const screenOn = state === 'title' || state === 'paused' || state === 'over';
-  joystickEl.classList.toggle('hidden', !isMobileDevice || state !== 'playing');
-  mobilePauseEl.classList.toggle('hidden', !isMobileDevice || state !== 'playing' || !run || run.demo);
   const titleDemo = state === 'title' && !!run?.demo;
   document.body.classList.toggle('title-demo', titleDemo);
   screenEl.classList.toggle('hidden', !screenOn);
@@ -1246,24 +1146,12 @@ function syncUi() {
 }
 
 screenEl.addEventListener('click', (event) => {
-  if (event.target.closest('[data-game-start]') && state === 'title') {
-    newRun();
-  } else if (event.target.closest('[data-game-restart]') && state === 'over') {
-    newRun();
-  } else if (event.target.closest('[data-game-resume]') && state === 'paused') {
-    state = 'playing';
-  } else if (event.target.closest('[data-game-title]')) {
-    goTitle();
-  } else if (event.target.closest('[data-ranking-open]')) {
+  if (event.target.closest('[data-ranking-open]')) {
     showingRanking = true;
     lastScreenState = null;
   } else if (event.target.closest('[data-ranking-close]')) {
     closeRanking();
   }
-});
-
-mobilePauseEl.addEventListener('click', () => {
-  if (isMobileDevice && state === 'playing' && run && !run.demo) state = 'paused';
 });
 
 // ===== メインループ =====
