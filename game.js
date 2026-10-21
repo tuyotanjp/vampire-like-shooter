@@ -167,6 +167,9 @@ function pollInput() {
   let my = sy + (now.down ? 1 : 0) - (now.up ? 1 : 0);
   mx += (isDown('KeyD', 'ArrowRight') ? 1 : 0) - (isDown('KeyA', 'ArrowLeft') ? 1 : 0);
   my += (isDown('KeyS', 'ArrowDown') ? 1 : 0) - (isDown('KeyW', 'ArrowUp') ? 1 : 0);
+  // タッチのバーチャルスティック（ゲーム中のみ値を持つ）
+  mx += touchMove.x;
+  my += touchMove.y;
   const len = Math.hypot(mx, my);
   if (len > 1) {
     mx /= len;
@@ -186,7 +189,7 @@ function pollInput() {
     mx,
     my,
     nav,
-    ok: edge('a') || isPressed('Enter', 'Space', 'KeyZ'),
+    ok: edge('a') || isPressed('Enter', 'Space', 'KeyZ') || consumeTap(),
     cancel: edge('b') || isPressed('KeyX', 'Backspace'),
     start: edge('start') || isPressed('Escape', 'KeyP'),
     ranking,
@@ -1079,22 +1082,42 @@ function updateHud() {
   }
 }
 
-function screenHtml() {
-  if (state === 'title') {
+function isTouchDevice() {
+  return window.matchMedia('(pointer: coarse)').matches;
+}
+
+function titleControlsHtml() {
+  if (isTouchDevice()) {
     return `
-      <div class="title">
-        <h1 class="title-logo"><img src="title2.png" alt="魔物の森サバイバル"></h1>
-        <p class="sub">3D VAMPIRE-LIKE SHOOTER</p>
-        <p class="demo-label"><span class="demo-live-dot"></span><span id="demo-status">LIVE DEMO</span><span class="demo-stats" id="demo-stats"></span></p>
-        <ul class="controls">
+          <li>画面の好きな所を押さえてドラッグで移動</li>
+          <li>武器は自動で攻撃。レベルアップで武器・弾・能力を強化</li>
+          <li>重装兵はとても頑丈。倒すと回復ハートを落とす</li>
+          <li>画面をタップでスタート（ランキングは下のボタン）</li>`;
+  }
+  return `
           <li>左スティック / 十字ボタン：移動（キーボード：WASD・矢印）</li>
           <li>武器は自動で攻撃。レベルアップで武器・弾・能力を強化</li>
           <li>重装兵はとても頑丈。倒すと回復ハートを落とす</li>
           <li>【パッド】A：決定　Start：ポーズ　B：戻る　Y：ランキング</li>
-          <li>【キーボード】Enter：決定　Esc / P：ポーズ　X：戻る　R：ランキング</li>
+          <li>【キーボード】Enter：決定　Esc / P：ポーズ　X：戻る　R：ランキング</li>`;
+}
+
+function titleStartHintHtml() {
+  return isTouchDevice() ? '画面をタップでスタート' : 'Aボタン / Enter でスタート';
+}
+
+function screenHtml() {
+  if (state === 'title') {
+    const touch = isTouchDevice();
+    return `
+      <div class="title${touch ? ' touch' : ''}">
+        <h1 class="title-logo"><img src="title2.png" alt="魔物の森サバイバル"></h1>
+        <p class="sub">3D VAMPIRE-LIKE SHOOTER</p>
+        <p class="demo-label"><span class="demo-live-dot"></span><span id="demo-status">LIVE DEMO</span><span class="demo-stats" id="demo-stats"></span></p>
+        <ul class="controls">${titleControlsHtml()}
         </ul>
-        <button class="screen-button" type="button" data-ranking-open>ランキングを見る <span>パッド Y ／ キーボード R</span></button>
-        <p class="blink">Aボタン / Enter でスタート</p>
+        <button class="screen-button" type="button" data-ranking-open>ランキングを見る${touch ? '' : ' <span>パッド Y ／ キーボード R</span>'}</button>
+        <p class="blink">${titleStartHintHtml()}</p>
       </div>`;
   }
   if (state === 'paused') {
@@ -1145,6 +1168,79 @@ function syncUi() {
   if (run && state !== 'title') updateHud();
 }
 
+// ===== タッチ/タップ入力 =====
+// タイトル画面（ランキング非表示）で画面をタップしたら開始する。ボタン上のタップは各ボタンの処理に任せる。
+let tapPending = false;
+// ===== タッチ移動（バーチャルスティック） =====
+// 指を置いた位置を中心に、ドラッグした方向・距離を移動量(-1〜1)にする。
+// ゲーム中（playing）だけ有効。タイトル・ポーズ・レベルアップ等のボタン操作は妨げない。
+const TOUCH_STICK_RADIUS = 65;
+const touchMove = { x: 0, y: 0 };
+const touchStickEl = document.getElementById('touch-stick');
+const touchStickKnobEl = document.getElementById('touch-stick-knob');
+let touchPointerId = null;
+let touchOrigin = { x: 0, y: 0 };
+
+function setTouchStickVisible(visible, x = 0, y = 0) {
+  touchStickEl.classList.toggle('hidden', !visible);
+  if (!visible) return;
+  touchStickEl.style.transform = `translate(${x}px, ${y}px)`;
+  touchStickKnobEl.style.transform = 'translate(0px, 0px)';
+}
+
+function resetTouchMove() {
+  touchPointerId = null;
+  touchMove.x = 0;
+  touchMove.y = 0;
+  setTouchStickVisible(false);
+}
+
+window.addEventListener('pointerdown', (event) => {
+  if (event.pointerType !== 'touch' || touchPointerId !== null) return;
+  if (state !== 'playing' || !run || run.demo) return;
+  if (event.target.closest('button, #audio-control')) return;
+  touchPointerId = event.pointerId;
+  touchOrigin = { x: event.clientX, y: event.clientY };
+  setTouchStickVisible(true, touchOrigin.x, touchOrigin.y);
+});
+
+window.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== touchPointerId) return;
+  const dx = event.clientX - touchOrigin.x;
+  const dy = event.clientY - touchOrigin.y;
+  const dist = Math.hypot(dx, dy);
+  const k = dist > TOUCH_STICK_RADIUS ? TOUCH_STICK_RADIUS / dist : 1;
+  const kx = dx * k;
+  const ky = dy * k;
+  touchMove.x = kx / TOUCH_STICK_RADIUS;
+  touchMove.y = ky / TOUCH_STICK_RADIUS;
+  touchStickKnobEl.style.transform = `translate(${kx}px, ${ky}px)`;
+});
+
+function endTouchMove(event) {
+  if (event.pointerId !== touchPointerId) return;
+  resetTouchMove();
+}
+window.addEventListener('pointerup', endTouchMove);
+window.addEventListener('pointercancel', endTouchMove);
+
+// ゲーム中以外に入ったら、スティックを必ず消す
+function syncTouchStick() {
+  if (touchPointerId !== null && state !== 'playing') resetTouchMove();
+}
+
+function consumeTap() {
+  const tapped = tapPending;
+  tapPending = false;
+  return tapped;
+}
+
+screenEl.addEventListener('pointerup', (event) => {
+  if (state !== 'title' || showingRanking) return;
+  if (event.target.closest('button, [data-ranking-open], [data-ranking-close]')) return;
+  tapPending = true;
+});
+
 screenEl.addEventListener('click', (event) => {
   if (event.target.closest('[data-ranking-open]')) {
     showingRanking = true;
@@ -1163,6 +1259,7 @@ function loop(now) {
     updatePadStatus();
     update(dt, pollInput());
     syncUi();
+    syncTouchStick();
     view.render(run, now / 1000, dt);
   } catch (error) {
     console.error('[Game loop error; continuing next frame]', error);

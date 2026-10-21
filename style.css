@@ -20,6 +20,8 @@ body {
   color: var(--ink);
   font-family: var(--font-ui);
   user-select: none;
+  /* ゲーム中のドラッグがスクロールやズームとして奪われないようにする（タッチ移動用） */
+  touch-action: none;
 }
 
 .hidden {
@@ -457,6 +459,9 @@ body {
 body.title-demo #screen {
   background: radial-gradient(ellipse at center, rgba(10, 6, 20, 0.12), rgba(6, 3, 12, 0.48));
   backdrop-filter: blur(1px);
+  /* タイトル画面では画面のどこをタップしても開始できるように、タップを受け取る */
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .title {
@@ -631,6 +636,11 @@ body.title-demo #screen {
   font-size: 17px;
 }
 
+.title.touch .controls {
+  font-size: 15px;
+  line-height: 1.8;
+}
+
 .stats {
   margin: 24px 0 8px;
   font-size: 24px;
@@ -666,4 +676,39 @@ body.title-demo #screen {
 
 #pad-status.connected {
   color: #7ef0a0;
+}
+
+/* ===== タッチ移動用のバーチャルスティック（指を置いた位置が中心になる） ===== */
+#touch-stick {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+#touch-stick-base,
+#touch-stick-knob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#touch-stick-base {
+  width: 130px;
+  height: 130px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(20, 12, 34, 0.25);
+}
+
+#touch-stick-knob {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 216, 77, 0.55);
+  box-shadow: 0 0 14px rgba(255, 216, 77, 0.4);
 }
