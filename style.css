@@ -636,6 +636,10 @@ body.title-demo #screen {
   font-size: 17px;
 }
 
+body.over-screen #screen {
+  pointer-events: auto;
+}
+
 .title.touch .controls {
   font-size: 15px;
   line-height: 1.8;
@@ -711,4 +715,91 @@ body.title-demo #screen {
   height: 56px;
   background: rgba(255, 216, 77, 0.55);
   box-shadow: 0 0 14px rgba(255, 216, 77, 0.4);
+}
+
+/* ===== 縦画面（スマホを縦にした時）の調整 ===== */
+@media (orientation: portrait) {
+  /* スキル選択: カードを縦に並べ、画面幅に収める */
+  #menu {
+    gap: 12px;
+    padding: 14px 16px;
+    overflow-y: auto;
+    justify-content: flex-start;
+  }
+
+  #menu h2 {
+    font-size: 30px;
+    margin: 0;
+  }
+
+  #cards {
+    flex-direction: column;
+    width: min(340px, calc(100vw - 32px));
+    gap: 8px;
+  }
+
+  .card {
+    width: 100%;
+    min-height: 0;
+    padding: 10px 14px;
+    gap: 3px;
+  }
+
+  .card .name {
+    font-size: 18px;
+  }
+
+  .card .desc {
+    font-size: 12px;
+    flex: none;
+  }
+
+  .card .status {
+    font-size: 12px;
+  }
+
+  .card:hover,
+  .card.selected {
+    transform: scale(1.02);
+  }
+
+  .hint {
+    font-size: 11px;
+    text-align: center;
+    padding: 0 12px;
+  }
+
+  /* HUD（縦画面）: 上から「体力・効果音」「時間」「ウェーブ」の順に、重ならない固定の段に配置する */
+  /* 右上の効果音ボタン（ON/OFFで幅が変わる。最大約140px + 右余白18px）の下に入らないよう、右側を空けておく */
+  #status-panel {
+    left: 10px;
+    right: 164px;
+    top: 12px;
+    width: auto;
+    height: 84px;
+    padding: 8px 10px;
+    overflow: hidden;
+  }
+
+  #audio-control {
+    top: 12px;
+    right: 10px;
+  }
+
+  #timer {
+    top: 108px;
+    left: 50%;
+    font-size: 26px;
+    line-height: 1.2;
+  }
+
+  #wave-status {
+    top: 146px;
+    line-height: 1.2;
+  }
+
+  #weapon-list,
+  #passive-list {
+    max-width: calc(100vw - 20px);
+  }
 }

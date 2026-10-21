@@ -1137,6 +1137,10 @@ function screenHtml() {
           <p>撃破数 <b>${run.kills}</b></p>
         </div>
         <p class="controls">Aボタン：もう一度　Bボタン：タイトルへ</p>
+        <div class="over-actions">
+          <button class="screen-button" type="button" data-retry>もう一度</button>
+          <button class="screen-button" type="button" data-to-title>タイトルへ</button>
+        </div>
       </div>`;
   }
   return '';
@@ -1148,6 +1152,8 @@ function syncUi() {
   const screenOn = state === 'title' || state === 'paused' || state === 'over';
   const titleDemo = state === 'title' && !!run?.demo;
   document.body.classList.toggle('title-demo', titleDemo);
+  // ゲームオーバー画面はボタンをタップできるように、画面全体のタップを受け付ける
+  document.body.classList.toggle('over-screen', state === 'over');
   screenEl.classList.toggle('hidden', !screenOn);
   if (state !== lastScreenState) {
     lastScreenState = state;
@@ -1242,7 +1248,11 @@ screenEl.addEventListener('pointerup', (event) => {
 });
 
 screenEl.addEventListener('click', (event) => {
-  if (event.target.closest('[data-ranking-open]')) {
+  if (event.target.closest('[data-retry]')) {
+    newRun();
+  } else if (event.target.closest('[data-to-title]')) {
+    goTitle();
+  } else if (event.target.closest('[data-ranking-open]')) {
     showingRanking = true;
     lastScreenState = null;
   } else if (event.target.closest('[data-ranking-close]')) {
