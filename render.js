@@ -104,7 +104,8 @@ const M = {
   red: basic(0xff3344),
   white: basic(0xffffff),
   black: basic(0x111111),
-  orb: basic(0xd9f2ff),
+  // 刃は発光させて見つけやすくする（ブルームで光らせるため明るい色の MeshBasic を使う）
+  bladeSteel: basic(0xcff8ff),
   gem: std(0x5fd8ff, { emissive: 0x3ab8ff, emissiveIntensity: 1.5, roughness: 0.2 }),
   trunk: std(0x4a2f1c),
   leaf: std(0x1f5a3a, { roughness: 0.9 }),
@@ -118,7 +119,7 @@ const G = {
   wing: new THREE.PlaneGeometry(1.8, 0.9),
   box: new THREE.BoxGeometry(1, 1, 1),
   cone: new THREE.ConeGeometry(0.2, 0.7, 8),
-  orb: new THREE.SphereGeometry(0.2, 10, 8),
+  bladeBlade: makeBladeGeometry(),
   gem: new THREE.OctahedronGeometry(0.18),
   heart: makeHeartGeometry(),
   trunk: new THREE.CylinderGeometry(0.12, 0.18, 1, 8),
@@ -126,6 +127,19 @@ const G = {
   bush: new THREE.SphereGeometry(0.55, 10, 8),
   rock: new THREE.DodecahedronGeometry(0.4),
 };
+
+// 刃身: 根元から先端へ細く伸びる単純な三角形の板（刃先は+Y）
+function makeBladeGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.07, 0);
+  shape.lineTo(0.07, 0);
+  shape.lineTo(0, 0.5);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.01, bevelEnabled: false, steps: 1 });
+  // 刃の中央を原点に合わせ、円周上の判定点が刃の中央に来るようにする
+  geo.translate(0, -0.25, -0.005);
+  return geo;
+}
 
 function makeGlowTexture() {
   const c = document.createElement('canvas');
@@ -876,6 +890,77 @@ function createView(container) {
   const bulletViews = new Map();
   const whipViews = new Map();
   const orbPool = [];
+  // 回転する刃の残像: 過去の姿勢を時刻付きで保持し、古いほど薄く小さく描く
+  const ORBIT_TRAIL_N = 6;
+  const ORBIT_TRAIL_INTERVAL = 0.03; // 残像1個あたりの時間間隔（秒）
+  const BLADE_SCALE = 1.6;
+  const BLADE_GLOW_SIZE = 1.1; // 中心グローの大きさ（刃の長さに対して小さく抑える）
+  const BLADE_GLOW_COLOR = 0x7ef0ff;
+  function makeBladeView() {
+    const root = new THREE.Group();
+    // 刃身1枚だけの簡素な形。刃先は -Z 方向を向き、heading に合わせて root を回す
+    const blade = mesh(G.bladeBlade, M.bladeSteel);
+    blade.rotation.x = -Math.PI / 2;
+    blade.scale.setScalar(BLADE_SCALE);
+    root.add(blade);
+    // 発光は刃の中心に小さいグロー1つだけ（範囲を抑えて周囲を照らしすぎないようにする）
+    const glowMat = new THREE.SpriteMaterial({
+      map: glowTex, color: BLADE_GLOW_COLOR, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8,
+    });
+    const glow = new THREE.Sprite(glowMat);
+    glow.scale.setScalar(BLADE_GLOW_SIZE);
+    glow.position.set(0, 0.3, 0);
+    root.add(glow);
+    scene.add(root);
+
+    // 残像: 刃身の複製を過去の姿勢に置く（同じジオメトリを共有）。刃と同じ色の加算合成で光らせる
+    const trail = [];
+    for (let k = 0; k < ORBIT_TRAIL_N; k++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: BLADE_GLOW_COLOR, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const ghost = mesh(G.bladeBlade, mat);
+      // 先に寝かせ(X)、その後に向き(Y)を適用する。既定の XYZ 順だと向きが効かないため YXZ にする
+      ghost.rotation.order = 'YXZ';
+      ghost.rotation.x = -Math.PI / 2;
+      ghost.scale.setScalar(BLADE_SCALE);
+      ghost.visible = false;
+      scene.add(ghost);
+      trail.push({ mesh: ghost, mat });
+    }
+    return { root, trail, history: [], glowMat, glow, pulsePhase: Math.random() * TAU };
+  }
+  // 刃の現在位置・向きを反映し、残像を時刻付きの履歴から描く
+  // 刃先(-Z)が接線方向 heading を向くような Y 回転角
+  const bladeYaw = (heading) => -heading - Math.PI / 2;
+  // 刃の中心グローを脈動させて存在感を出す
+  function updateBladeView(view, x, z, heading, time) {
+    view.root.position.set(x, 1.0, z);
+    view.root.rotation.y = bladeYaw(heading);
+    const pulse = 1 + Math.sin(ft * 14 + view.pulsePhase) * 0.1;
+    view.glow.scale.setScalar(BLADE_GLOW_SIZE * pulse);
+    view.glowMat.opacity = 0.7 + Math.sin(ft * 9 + view.pulsePhase) * 0.1;
+    view.history.unshift({ x, z, heading, time });
+    // 残像の最大時間より古い履歴は捨てる（フレームレートに依存しないように時間で刈り込む）
+    const oldest = time - (ORBIT_TRAIL_N + 1) * ORBIT_TRAIL_INTERVAL;
+    while (view.history.length > 1 && view.history[view.history.length - 1].time < oldest) {
+      view.history.pop();
+    }
+    view.trail.forEach((t, k) => {
+      const target = time - (k + 1) * ORBIT_TRAIL_INTERVAL;
+      const past = view.history.find((h) => h.time <= target);
+      if (!past) {
+        t.mesh.visible = false;
+        return;
+      }
+      const fade = 1 - (k + 1) / (ORBIT_TRAIL_N + 1);
+      t.mesh.visible = true;
+      t.mesh.position.set(past.x, 1.0, past.z);
+      t.mesh.rotation.y = bladeYaw(past.heading);
+      t.mesh.scale.setScalar(BLADE_SCALE * (1 - (k + 1) * 0.05));
+      t.mat.opacity = 0.5 * fade;
+    });
+  }
   const recoveryViews = new Map();
   const floaterEls = new Map();
   const damageLayer = document.getElementById('damage-layer');
@@ -1695,26 +1780,29 @@ function createView(container) {
       hero.aura.material.opacity = 0.45 + Math.sin(now * 4) * 0.15;
     }
 
-    // 回転する刃
+    // 回転する刃（刃身・柄・鍔を持つ剣。接線方向を向き、残像を残す）
     const orbit = run && run.weapons.find((w) => w.id === 'orbit');
     const orbCount = orbit ? 1 + orbit.lv : 0;
     const orbR = orbit ? (55 + orbit.lv * 4) * S : 0;
     while (orbPool.length < orbCount) {
-      const o = mesh(G.orb, M.orb);
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: glowTex, color: 0xd9f2ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
-      }));
-      sprite.scale.setScalar(0.9);
-      o.add(sprite);
-      scene.add(o);
-      orbPool.push(o);
+      const blade = makeBladeView();
+      scene.add(blade.root);
+      orbPool.push(blade);
     }
-    orbPool.forEach((o, i) => {
-      o.visible = i < orbCount;
-      if (o.visible) {
-        const a = orbit.angle + (TAU * i) / orbCount;
-        o.position.set(fx + Math.cos(a) * orbR, 1.0, fz + Math.sin(a) * orbR);
+    orbPool.forEach((blade, i) => {
+      blade.root.visible = i < orbCount;
+      if (!blade.root.visible) {
+        // 刃が不要になったら残像も消し、履歴を捨てる（次のランに残像を持ち越さない）
+        blade.trail.forEach((t) => { t.mesh.visible = false; });
+        blade.history.length = 0;
+        return;
       }
+      const a = orbit.angle + (TAU * i) / orbCount;
+      const x = fx + Math.cos(a) * orbR;
+      const z = fz + Math.sin(a) * orbR;
+      // 円の接線方向（回転の進行方向）に刃先を向ける
+      const heading = a + Math.PI / 2;
+      updateBladeView(blade, x, z, heading, now);
     });
 
     // 敵・弾・鞭
