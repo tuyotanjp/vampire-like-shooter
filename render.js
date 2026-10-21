@@ -13,6 +13,19 @@ const MAX_TRANSIENTS = 140;
 const MAX_RECOVERIES = 80;
 const MAX_TRANSIENTS_PER_FRAME = 18;
 const MAX_GEMS = 1000;
+// 宝石の段階。撃破で得る獲得量(xp)が minXp 以上になると、その段階の色・大きさになる
+const GEM_TIERS = [
+  { minXp: 0, scale: 1.0, color: 0x5fd8ff, emissive: 0x3ab8ff },
+  { minXp: 2, scale: 1.25, color: 0x6dff8e, emissive: 0x2fff6a },
+  { minXp: 4, scale: 1.5, color: 0xffe25a, emissive: 0xffb800 },
+  { minXp: 6, scale: 1.8, color: 0xff8a3d, emissive: 0xff5a00 },
+  { minXp: 9, scale: 2.2, color: 0xff4df0, emissive: 0xff1ad9 },
+];
+const gemTierIndex = (xp) => {
+  let idx = 0;
+  for (let i = 0; i < GEM_TIERS.length; i++) if (xp >= GEM_TIERS[i].minXp) idx = i;
+  return idx;
+};
 const MOTE_N = 180;
 const HERO_SCALE = 0.6;
 // 敵の見た目の身長。円形当たり判定の半径は各モデルの実際の外周から求める。
@@ -769,8 +782,7 @@ function createView(container) {
   scene.background = new THREE.Color(0x120c1c);
   scene.fog = new THREE.FogExp2(0x1a1030, 0.0065);
 
-  const getCameraFov = () => window.innerWidth <= 700 && window.innerHeight > window.innerWidth ? 48 : 40;
-  const camera = new THREE.PerspectiveCamera(getCameraFov(), window.innerWidth / window.innerHeight, 0.5, 800);
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.5, 800);
   const camPos = new THREE.Vector3(0, 30, 24);
   const shakeOffset = new THREE.Vector3();
   camera.position.copy(camPos);
@@ -873,10 +885,14 @@ function createView(container) {
   const waveBanner = document.getElementById('wave-banner');
   const tmpV = new THREE.Vector3();
 
-  // 宝石（InstancedMesh）
-  const gemMesh = new THREE.InstancedMesh(G.gem, M.gem, MAX_GEMS);
-  gemMesh.frustumCulled = false;
-  scene.add(gemMesh);
+  // 宝石（InstancedMesh）。獲得量の段階ごとに色・大きさが違うため、段階別にメッシュを分ける
+  const gemMeshes = GEM_TIERS.map((tier) => {
+    const mat = std(tier.color, { emissive: tier.emissive, emissiveIntensity: 1.5, roughness: 0.2 });
+    const m = new THREE.InstancedMesh(G.gem, mat, MAX_GEMS);
+    m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  });
   const recoveryMesh = new THREE.InstancedMesh(G.heart, M.heal, MAX_RECOVERIES);
   recoveryMesh.frustumCulled = false;
   scene.add(recoveryMesh);
@@ -1733,16 +1749,21 @@ function createView(container) {
     // XPジェム
     const gems = run ? run.gems : [];
     const gemCount = Math.min(gems.length, MAX_GEMS);
+    const gemTierCounts = GEM_TIERS.map(() => 0);
     for (let i = 0; i < gemCount; i++) {
       const g = gems[i];
+      const tier = gemTierIndex(g.v);
+      const slot = gemTierCounts[tier]++;
       dummy.position.set(g.x * S, 0.5 + Math.sin(now * 4 + i) * 0.08, g.y * S);
       dummy.rotation.set(0, now * 2 + i, 0);
-      dummy.scale.setScalar(1);
+      dummy.scale.setScalar(GEM_TIERS[tier].scale);
       dummy.updateMatrix();
-      gemMesh.setMatrixAt(i, dummy.matrix);
+      gemMeshes[tier].setMatrixAt(slot, dummy.matrix);
     }
-    gemMesh.count = gemCount;
-    gemMesh.instanceMatrix.needsUpdate = true;
+    gemMeshes.forEach((m, tier) => {
+      m.count = gemTierCounts[tier];
+      m.instanceMatrix.needsUpdate = true;
+    });
 
     // 地面の装飾・光の粒
     ensureDecor(fx, fz);
@@ -1785,7 +1806,6 @@ function createView(container) {
     const h = window.innerHeight;
     renderer.setSize(w, h);
     camera.aspect = w / h;
-    camera.fov = getCameraFov();
     camera.updateProjectionMatrix();
     composer.setSize(w, h);
   }
